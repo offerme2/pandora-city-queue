@@ -68,9 +68,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-fo
   padding:56px 64px 48px;
 }
 [data-layout="phone"] .stage{
-  left:50%;top:0;width:390px;
-  transform:translateX(-50%) scale(var(--scale,1));transform-origin:top center;
-  padding:34px 20px 26px;min-height:844px;
+  left:0;right:0;top:0;width:390px;margin-inline:auto;   /* margin:auto 置中，不用 translate（避免偏移） */
+  transform:scale(var(--scale,1));transform-origin:top center;
+  padding:28px 18px 20px;                                 /* min-height 由 JS 設成剛好一個視窗高 */
 }
 /* 連線降級：整體壓暗 + 去彩 */
 [data-conn="stale"] .stage{opacity:.82;filter:grayscale(.25)}
@@ -78,7 +78,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-fo
 /* ---------- 標頭 ---------- */
 .top{display:flex;align-items:center;justify-content:space-between;flex:none}
 [data-layout="wide"] .top{margin-bottom:40px}
-[data-layout="phone"] .top{flex-direction:column;gap:16px;margin-bottom:18px}
+[data-layout="phone"] .top{flex-direction:column;gap:12px;margin-bottom:14px}
 
 .brand{display:flex;align-items:center;gap:22px}
 .brand .bd2{height:52px;filter:drop-shadow(0 2px 10px rgba(0,0,0,.5))}
@@ -114,7 +114,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-fo
 /* == 叫號格 == */
 .grid{display:grid;gap:26px;width:100%}
 [data-layout="wide"] .grid{grid-template-columns:1fr 1fr;grid-auto-rows:280px;margin-block:auto}
-[data-layout="phone"] .grid{grid-template-columns:1fr;gap:16px;flex:1}
+[data-layout="phone"] .main{flex-direction:column;justify-content:center}
+[data-layout="phone"] .grid{grid-template-columns:1fr;gap:12px;flex:0 0 auto}
 
 .card{
   --accent:#5cf;--cut:26px;--cut-sm:14px;--frame:1.3px;
@@ -151,8 +152,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-fo
   background:radial-gradient(65% 125% at 20% 50%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
   mix-blend-mode:screen;opacity:.55;
 }
-[data-layout="phone"] .card{--cut:17px;--cut-sm:10px}
-[data-layout="phone"] .card__in{padding:16px 18px;gap:14px}
+[data-layout="phone"] .card{--cut:15px;--cut-sm:9px}
+[data-layout="phone"] .card__in{padding:14px 16px;gap:14px}
 
 .badge{
   flex:none;display:grid;place-items:center;width:104px;height:104px;
@@ -163,31 +164,32 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-fo
   filter:drop-shadow(0 0 16px var(--accent)) drop-shadow(0 0 30px color-mix(in srgb, var(--accent) 45%, transparent));
   text-shadow:0 0 14px rgba(255,255,255,.65);
 }
-[data-layout="phone"] .badge{width:60px;height:60px;font-size:36px;
-  clip-path:polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)}
+[data-layout="phone"] .badge{width:54px;height:54px;font-size:32px;
+  clip-path:polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px), 0 8px)}
 
 .card .info{flex:1 1 auto;min-width:0}
 .card .name{font-weight:900;font-size:44px;letter-spacing:.02em;white-space:nowrap;
   text-shadow:0 0 18px color-mix(in srgb, var(--accent) 50%, transparent)}
 .card .label{margin-top:6px;color:var(--ink-dim);font-weight:500;font-size:20px;letter-spacing:.06em}
-[data-layout="phone"] .card .name{font-size:25px}
-[data-layout="phone"] .card .label{font-size:13px;margin-top:3px}
+[data-layout="phone"] .card .name{font-size:22px}
+[data-layout="phone"] .card .label{font-size:12px;margin-top:2px}
+[data-layout="phone"] .card .value{margin-left:12px}
 
 .card .value{flex:none;margin-left:20px;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .card .num{font-family:var(--font-num);font-weight:700;font-size:96px;line-height:.95;letter-spacing:.02em;white-space:nowrap;
   color:#fff;text-shadow:0 0 10px #fff, 0 0 26px var(--accent), 0 0 54px color-mix(in srgb, var(--accent) 60%, transparent)}
 .card .num.num--text{font-family:var(--font-zh);font-weight:900;font-size:58px}
 .card .sub{font-family:var(--font-num);font-weight:600;font-size:26px;color:var(--ink-dim);letter-spacing:.04em}
-[data-layout="phone"] .card .num{font-size:46px}
-[data-layout="phone"] .card .num.num--text{font-size:30px}
-[data-layout="phone"] .card .sub{font-size:15px}
+[data-layout="phone"] .card .num{font-size:38px}
+[data-layout="phone"] .card .num.num--text{font-size:25px}
+[data-layout="phone"] .card .sub{font-size:13px}
 
 /* 單格異常狀態（暫停 / 額滿 / 本區結束）：邊框顏色不變，值改琥珀字 */
 .card.is-abnormal .num{font-family:var(--font-zh);font-weight:900;font-size:52px;color:var(--warn);
   text-shadow:0 0 18px color-mix(in srgb, var(--warn) 55%, transparent)}
 .card.is-abnormal .sub{color:color-mix(in srgb, var(--warn) 55%, var(--ink-dim))}
 .card.is-abnormal .card__in{filter:saturate(.7)}
-[data-layout="phone"] .card.is-abnormal .num{font-size:26px}
+[data-layout="phone"] .card.is-abnormal .num{font-size:22px}
 
 .card.zone--a{--accent:var(--a-a)}
 .card.zone--b{--accent:var(--a-b);animation-delay:-.9s}
@@ -378,7 +380,7 @@ function fit(){
   const stage = document.querySelector('.stage');
   // 背景永遠鋪滿視窗寬（手機在電腦上預覽時也不露黑）
   root.style.setProperty('--effect-ratio',
-    String(layout === 'phone' ? Math.min(2.2, 2560 / innerWidth) : Math.min(1, 2560 / innerWidth)));
+    String(layout === 'phone' ? Math.min(1.7, 2560 / innerWidth) : Math.min(1, 2560 / innerWidth)));
   if (layout === 'wide'){
     stage.style.setProperty('--scale', Math.min(innerWidth / 1920, innerHeight / 1080));
   } else {
@@ -386,6 +388,7 @@ function fit(){
     // 在電腦上用 ?layout=phone 預覽（innerWidth>500）→ 固定成 390 寬的一支手機置中，不放大。
     const s = innerWidth <= 500 ? innerWidth / 390 : 1;
     stage.style.setProperty('--scale', s);
+    stage.style.minHeight = Math.ceil(innerHeight / s) + 'px';   // 讓舞台剛好一個視窗高 → 四格 + 頭尾一次看完
     document.body.style.height = Math.max(innerHeight, stage.offsetHeight * s) + 'px';
   }
 }
