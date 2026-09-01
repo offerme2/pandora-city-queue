@@ -376,14 +376,17 @@ root.dataset.layout = pickLayout();
 function fit(){
   const layout = root.dataset.layout;
   const stage = document.querySelector('.stage');
+  // 背景永遠鋪滿視窗寬（手機在電腦上預覽時也不露黑）
   root.style.setProperty('--effect-ratio',
-    String(layout === 'phone' ? 2.2 : Math.min(1, 2560 / innerWidth)));
+    String(layout === 'phone' ? Math.min(2.2, 2560 / innerWidth) : Math.min(1, 2560 / innerWidth)));
   if (layout === 'wide'){
     stage.style.setProperty('--scale', Math.min(innerWidth / 1920, innerHeight / 1080));
   } else {
-    const s = innerWidth / 390;
+    // 實機手機 innerWidth≈390 → 縮放填滿寬度；
+    // 在電腦上用 ?layout=phone 預覽（innerWidth>500）→ 固定成 390 寬的一支手機置中，不放大。
+    const s = innerWidth <= 500 ? innerWidth / 390 : 1;
     stage.style.setProperty('--scale', s);
-    document.body.style.height = (stage.offsetHeight * s) + 'px';
+    document.body.style.height = Math.max(innerHeight, stage.offsetHeight * s) + 'px';
   }
 }
 

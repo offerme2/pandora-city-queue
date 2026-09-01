@@ -384,18 +384,19 @@ function fit(){
   const stage = document.querySelector('.stage--' + layout);
   if (!stage) return;
 
-  // 背景 effect-ratio（BD2 擺法：原生尺寸 ÷ ratio、水平置中）。
-  // 桌機一律讓城市寬度 ≥ 視窗寬（避免兩側露黑）：ratio = min(1, 2560 / 視窗寬)。
-  const ratio = layout === 'phone' ? 2.2 : Math.min(1, 2560 / innerWidth);
+  // 背景 effect-ratio：城市寬度一律 ≥ 視窗寬（避免兩側露黑，手機在電腦上預覽也適用）
+  const ratio = layout === 'phone' ? Math.min(2.2, 2560 / innerWidth) : Math.min(1, 2560 / innerWidth);
   document.documentElement.style.setProperty('--effect-ratio', String(ratio));
 
   if (layout === 'wide'){
     const s = Math.min(innerWidth / 1920, innerHeight / 1080);
     stage.style.setProperty('--scale', s);
   } else {
-    const s = innerWidth / 390;
+    // 實機手機 innerWidth≈390 → 縮放填滿寬度；
+    // 電腦上用 ?layout=phone 預覽（innerWidth>500）→ 固定 390 寬置中、不放大。
+    const s = innerWidth <= 500 ? innerWidth / 390 : 1;
     stage.style.setProperty('--scale', s);
-    document.body.style.height = (stage.offsetHeight * s) + 'px';
+    document.body.style.height = Math.max(innerHeight, stage.offsetHeight * s) + 'px';
   }
 }
 
