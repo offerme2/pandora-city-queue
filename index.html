@@ -256,6 +256,14 @@ body{
 .stage--phone .foot .main{font-size:14px}
 .stage--phone .foot .note{font-size:11px}
 
+/* 手機版：關掉 iOS Safari 上會拖垮 GPU / 造成「重複發生問題」重載的效果
+   （逐幀重繪的 animated filter、多層 backdrop-filter、blend mode），
+   保留靜態霓虹外框 + 旋轉掃光。 */
+.stage--phone .card{animation:none}
+.stage--phone .card__in{animation:none;backdrop-filter:none}
+.stage--phone .card__in::after{mix-blend-mode:normal;opacity:.32}
+.stage--phone .badge{filter:drop-shadow(0 0 10px var(--accent))}
+
 /* ================= 動畫 ================= */
 @keyframes sweep{to{--sweep:360deg}}
 @keyframes cardPulse{
@@ -366,9 +374,10 @@ function fit(){
   const stage = document.querySelector('.stage--' + layout);
   if (!stage) return;
 
-  // 背景 effect-ratio（沿用 BD2：桌面 1、中尺寸 1.5、手機 2.2；原生尺寸 ÷ ratio）
-  const ratio = layout === 'phone' ? 2.2 : (innerWidth >= 1200 ? 1 : 1.5);
-  document.documentElement.style.setProperty('--effect-ratio', ratio);
+  // 背景 effect-ratio（BD2 擺法：原生尺寸 ÷ ratio、水平置中）。
+  // 桌機一律讓城市寬度 ≥ 視窗寬（避免兩側露黑）：ratio = min(1, 2560 / 視窗寬)。
+  const ratio = layout === 'phone' ? 2.2 : Math.min(1, 2560 / innerWidth);
+  document.documentElement.style.setProperty('--effect-ratio', String(ratio));
 
   if (layout === 'wide'){
     const s = Math.min(innerWidth / 1920, innerHeight / 1080);
@@ -411,8 +420,16 @@ function render(state){
 }
 
 render(STATE);
-addEventListener('resize', fit);
-addEventListener('orientationchange', () => setTimeout(fit, 200));
+
+// 只有「寬度」變才重排。iOS Safari 捲動收合網址列會狂發 resize（只改高度），
+// 若每次都重排 + 改 body 高度會形成迴圈，Safari 就會「重複發生問題」而重載。
+let lastW = innerWidth;
+addEventListener('resize', () => {
+  if (innerWidth === lastW) return;
+  lastW = innerWidth;
+  fit();
+});
+addEventListener('orientationchange', () => setTimeout(() => { lastW = innerWidth; fit(); }, 250));
 
 // 更新時間戳（暫以本機時間；接後端後改為資料回傳值）
 setInterval(() => {
