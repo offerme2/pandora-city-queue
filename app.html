@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-layout="wide" data-phase="live" data-conn="online">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<title>PANDORA CITY｜線上叫號看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ==================================================================
+   PANDORA CITY — 線上叫號看板（狀態驅動版）
+
+   ● 一頁、同一個網址。前台輪詢後台，後台回什麼狀態就顯示什麼。
+   ● 後台工程師只需要：實作 fetchState()，回傳符合 data-contract.md 的 JSON。
+   ● 兩套固定版型（非 RWD）：螢幕最短邊 <=500 → 手機版；其餘 → 寬版。
+   ● 開發預覽網址參數：
+       ?layout=phone|wide      強制版型
+       ?mock=live|live-paused|pre|today_ended|ended|stale|offline
+                               用內建假資料預覽（上線後假資料整段可刪）
+   ================================================================== */
+
+@property --sweep { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+
+:root{
+  --bg:#04060f;
+  --ink:#eaf2ff;
+  --ink-dim:#8fa4c9;
+  --panel:rgba(8,13,30,.58);
+  --panel-line:rgba(120,160,255,.22);
+  --warn:#f5a623;                 /* 異常狀態（暫停 / 結束）統一用琥珀色 */
+  --font-zh:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --font-num:"Rajdhani","Noto Sans TC",sans-serif;
+  --a-a:#22e3c9;  --a-b:#3b7bff;  --a-c:#9b6cff;  --a-d:#f0429e;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-zh);-webkit-font-smoothing:antialiased;overflow:hidden}
+[data-layout="phone"] body{overflow-x:hidden;overflow-y:auto}
+
+/* ---------- 背景 ---------- */
+.backdrop{position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--bg)}
+.backdrop .sky{
+  position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:calc(2560px / var(--effect-ratio,1));height:calc(1312px / var(--effect-ratio,1));
+  background:url("image/pandora-sky.jpg") center top/100% 100% no-repeat;
+  filter:brightness(.6) saturate(1.12) hue-rotate(-4deg);
+}
+.backdrop .city{
+  position:absolute;left:50%;transform:translateX(-50%);top:calc(132px / var(--effect-ratio,1));
+  width:calc(2560px / var(--effect-ratio,1));height:calc(1336px / var(--effect-ratio,1));
+  background:url("image/pandora-buildings.png") center top/100% 100% no-repeat;
+}
+.backdrop .veil{
+  position:absolute;inset:0;
+  background:
+    linear-gradient(180deg, rgba(4,6,15,.5) 0, rgba(4,6,15,.12) 15%, transparent 42%, transparent 74%, rgba(4,6,15,.4) 100%),
+    radial-gradient(150% 80% at 50% 26%, transparent 36%, rgba(4,6,15,.28) 84%, rgba(4,6,15,.55) 100%);
+}
+
+/* ---------- 舞台 ---------- */
+.stage{position:fixed;z-index:1;color:var(--ink);display:flex;flex-direction:column}
+[data-layout="wide"] .stage{
+  left:50%;top:50%;width:1920px;height:1080px;
+  transform:translate(-50%,-50%) scale(var(--scale,1));
+  padding:56px 64px 48px;
+}
+[data-layout="phone"] .stage{
+  left:50%;top:0;width:390px;
+  transform:translateX(-50%) scale(var(--scale,1));transform-origin:top center;
+  padding:34px 20px 26px;min-height:844px;
+}
+/* 連線降級：整體壓暗 + 去彩 */
+[data-conn="stale"] .stage{opacity:.82;filter:grayscale(.25)}
+
+/* ---------- 標頭 ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;flex:none}
+[data-layout="wide"] .top{margin-bottom:40px}
+[data-layout="phone"] .top{flex-direction:column;gap:16px;margin-bottom:18px}
+
+.brand{display:flex;align-items:center;gap:22px}
+.brand .bd2{height:52px;filter:drop-shadow(0 2px 10px rgba(0,0,0,.5))}
+.brand .sep{width:1px;height:40px;background:linear-gradient(transparent,rgba(150,180,255,.6),transparent)}
+.brand .pandora{height:44px;filter:drop-shadow(0 0 14px rgba(80,150,255,.55))}
+[data-layout="phone"] .brand{gap:14px}
+[data-layout="phone"] .brand .bd2{height:30px}
+[data-layout="phone"] .brand .sep{height:24px}
+[data-layout="phone"] .brand .pandora{height:26px}
+
+.infobar{display:flex;align-items:stretch;border:1px solid var(--panel-line);border-radius:6px;
+  background:var(--panel);overflow:hidden}
+[data-layout="wide"] .infobar{height:64px;font-size:24px}
+[data-layout="phone"] .infobar{height:52px;font-size:15px;width:100%}
+.infobar .seg{display:flex;align-items:center;justify-content:center;gap:10px;padding:0 26px;
+  font-weight:700;letter-spacing:.04em;white-space:nowrap}
+[data-layout="phone"] .infobar .seg{flex:1;padding:0 10px}
+.infobar .seg + .seg{border-left:1px solid var(--panel-line)}
+.infobar .lbl{color:var(--ink-dim);font-weight:500;font-size:.82em}
+.infobar .lbl::after{content:"最後更新時間"}
+[data-layout="phone"] .infobar .lbl::after{content:"更新"}
+.infobar .val{font-family:var(--font-num);font-weight:600}
+[data-conn="stale"] .infobar .val{color:var(--warn)}
+/* 非 live：只留活動名那一段；ended：整條藏起來 */
+[data-phase="pre"] .infobar .seg--updated,
+[data-phase="today_ended"] .infobar .seg--updated{display:none}
+[data-phase="ended"] .infobar{display:none}
+
+/* ---------- 中央區（grid 或 state-card 二擇一） ---------- */
+.main{flex:1 1 auto;display:flex;min-height:0}
+[data-layout="wide"] .main{align-items:center}
+
+/* == 叫號格 == */
+.grid{display:grid;gap:26px;width:100%}
+[data-layout="wide"] .grid{grid-template-columns:1fr 1fr;grid-auto-rows:280px;margin-block:auto}
+[data-layout="phone"] .grid{grid-template-columns:1fr;gap:16px;flex:1}
+
+.card{
+  --accent:#5cf;--cut:26px;--cut-sm:14px;--frame:1.3px;
+  --clip:polygon(var(--cut) 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm), 100% 100%,
+    var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  position:relative;padding:var(--frame);clip-path:var(--clip);
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--accent) 88%, #fff 12%), var(--accent) 45%,
+    color-mix(in srgb, var(--accent) 84%, #000 16%));
+  filter:drop-shadow(0 0 3px var(--accent))
+    drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 40%, transparent))
+    drop-shadow(0 14px 34px rgba(0,0,0,.42));
+  animation:cardPulse 3.6s ease-in-out infinite;
+}
+.card::before{
+  content:"";position:absolute;inset:0;z-index:3;pointer-events:none;clip-path:var(--clip);padding:8px;
+  background:conic-gradient(from var(--sweep), transparent 0turn,
+    color-mix(in srgb, var(--accent) 95%, #fff) .06turn,
+    color-mix(in srgb, var(--accent) 55%, transparent) .13turn, transparent .24turn, transparent 1turn);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  mix-blend-mode:screen;opacity:.7;animation:sweep 4.6s linear infinite;
+}
+.card__in{
+  position:relative;z-index:2;clip-path:var(--clip);
+  display:flex;align-items:center;gap:26px;padding:28px 38px;min-height:100%;
+  background:linear-gradient(150deg, rgba(10,15,32,.94), rgba(8,12,26,.82));
+  backdrop-filter:blur(10px);
+  box-shadow:inset 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:cardInner 3.6s ease-in-out infinite;
+}
+.card__in::after{
+  content:"";position:absolute;inset:0;z-index:-1;clip-path:var(--clip);pointer-events:none;
+  background:radial-gradient(65% 125% at 20% 50%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  mix-blend-mode:screen;opacity:.55;
+}
+[data-layout="phone"] .card{--cut:17px;--cut-sm:10px}
+[data-layout="phone"] .card__in{padding:16px 18px;gap:14px}
+
+.badge{
+  flex:none;display:grid;place-items:center;width:104px;height:104px;
+  clip-path:polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 calc(100% - 14px), 0 14px);
+  font-family:var(--font-num);font-weight:700;font-size:64px;line-height:1;color:#fff;
+  background:linear-gradient(160deg, color-mix(in srgb, var(--accent) 78%, #fff 22%), color-mix(in srgb, var(--accent) 82%, #000 18%));
+  box-shadow:inset 0 2px 8px rgba(255,255,255,.45), inset 0 -6px 14px rgba(0,0,0,.28);
+  filter:drop-shadow(0 0 16px var(--accent)) drop-shadow(0 0 30px color-mix(in srgb, var(--accent) 45%, transparent));
+  text-shadow:0 0 14px rgba(255,255,255,.65);
+}
+[data-layout="phone"] .badge{width:60px;height:60px;font-size:36px;
+  clip-path:polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)}
+
+.card .info{flex:1 1 auto;min-width:0}
+.card .name{font-weight:900;font-size:44px;letter-spacing:.02em;white-space:nowrap;
+  text-shadow:0 0 18px color-mix(in srgb, var(--accent) 50%, transparent)}
+.card .label{margin-top:6px;color:var(--ink-dim);font-weight:500;font-size:20px;letter-spacing:.06em}
+[data-layout="phone"] .card .name{font-size:25px}
+[data-layout="phone"] .card .label{font-size:13px;margin-top:3px}
+
+.card .value{flex:none;margin-left:20px;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.card .num{font-family:var(--font-num);font-weight:700;font-size:96px;line-height:.95;letter-spacing:.02em;white-space:nowrap;
+  color:#fff;text-shadow:0 0 10px #fff, 0 0 26px var(--accent), 0 0 54px color-mix(in srgb, var(--accent) 60%, transparent)}
+.card .num.num--text{font-family:var(--font-zh);font-weight:900;font-size:58px}
+.card .sub{font-family:var(--font-num);font-weight:600;font-size:26px;color:var(--ink-dim);letter-spacing:.04em}
+[data-layout="phone"] .card .num{font-size:46px}
+[data-layout="phone"] .card .num.num--text{font-size:30px}
+[data-layout="phone"] .card .sub{font-size:15px}
+
+/* 單格異常狀態（暫停 / 額滿 / 本區結束）：邊框顏色不變，值改琥珀字 */
+.card.is-abnormal .num{font-family:var(--font-zh);font-weight:900;font-size:52px;color:var(--warn);
+  text-shadow:0 0 18px color-mix(in srgb, var(--warn) 55%, transparent)}
+.card.is-abnormal .sub{color:color-mix(in srgb, var(--warn) 55%, var(--ink-dim))}
+.card.is-abnormal .card__in{filter:saturate(.7)}
+[data-layout="phone"] .card.is-abnormal .num{font-size:26px}
+
+.card.zone--a{--accent:var(--a-a)}
+.card.zone--b{--accent:var(--a-b);animation-delay:-.9s}
+.card.zone--c{--accent:var(--a-c);animation-delay:-1.8s}
+.card.zone--d{--accent:var(--a-d);animation-delay:-2.7s}
+.card.zone--b .card__in,.card.zone--b::before{animation-delay:-.9s}
+.card.zone--c .card__in,.card.zone--c::before{animation-delay:-1.8s}
+.card.zone--d .card__in,.card.zone--d::before{animation-delay:-2.7s}
+
+/* == 全屏狀態卡（pre / today_ended / ended / offline 共用） == */
+.state-card{
+  --accent:var(--a-a);
+  --clip:polygon(24px 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%, 0 24px);
+  position:relative;width:100%;flex:1 1 auto;
+  clip-path:var(--clip);padding:2px;
+  background:linear-gradient(150deg, color-mix(in srgb, var(--accent) 70%, #fff 10%), color-mix(in srgb, var(--accent) 40%, #000 20%));
+  filter:drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 30%, transparent)) drop-shadow(0 14px 34px rgba(0,0,0,.42));
+}
+.state-card__in{
+  position:relative;clip-path:var(--clip);min-height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:64px;gap:0;
+  background:linear-gradient(150deg, rgba(9,15,33,.95), rgba(7,11,26,.88));
+  backdrop-filter:blur(10px);
+  box-shadow:inset 0 0 120px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.state-card h1{font-weight:900;font-size:96px;line-height:1.3;letter-spacing:.04em;color:#fff;
+  text-shadow:0 0 34px color-mix(in srgb, var(--accent) 30%, transparent)}
+.state-card .state-msg{margin-top:26px;color:#adc2ce;font-size:28px;line-height:1.7;letter-spacing:.03em}
+.state-card .state-sched{margin-top:52px;padding:26px 40px;
+  border-top:1px solid color-mix(in srgb, var(--accent) 48%, transparent);
+  border-bottom:1px solid color-mix(in srgb, var(--accent) 48%, transparent)}
+.state-card .state-sched span{display:block;color:var(--accent);font-size:18px;font-weight:800;letter-spacing:.16em}
+.state-card .state-sched strong{display:block;margin-top:16px;font-family:var(--font-num);font-size:46px;font-weight:700;letter-spacing:.04em}
+.state-card .state-sched time{display:block;margin-top:8px;color:#dce8ed;font-size:30px;letter-spacing:.05em}
+[data-layout="phone"] .state-card__in{padding:36px 24px}
+[data-layout="phone"] .state-card h1{font-size:44px}
+[data-layout="phone"] .state-card .state-msg{margin-top:18px;font-size:16px}
+[data-layout="phone"] .state-card .state-sched{margin-top:32px;padding:18px 20px}
+[data-layout="phone"] .state-card .state-sched span{font-size:14px;letter-spacing:.1em}
+[data-layout="phone"] .state-card .state-sched strong{font-size:30px}
+[data-layout="phone"] .state-card .state-sched time{font-size:20px}
+[data-conn="offline"] .state-card{--accent:var(--warn)}
+
+/* ---------- 頁尾 ---------- */
+.foot{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  border:1px solid var(--panel-line);border-radius:6px;background:var(--panel);text-align:center}
+[data-layout="wide"] .foot{height:70px;font-size:22px;margin-top:40px;flex-direction:row;gap:18px;flex-wrap:wrap}
+[data-layout="phone"] .foot{margin-top:18px;padding:12px 14px}
+.foot .fmain{font-weight:700;letter-spacing:.06em}
+.foot .fnote{color:var(--ink-dim);font-weight:500}
+[data-layout="wide"] .foot .fnote{font-size:19px}
+[data-layout="phone"] .foot .fmain{font-size:14px}
+[data-layout="phone"] .foot .fnote{font-size:11px}
+
+/* ---------- 動畫 ---------- */
+@keyframes sweep{to{--sweep:360deg}}
+@keyframes cardPulse{
+  0%,100%{filter:drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 40%, transparent))
+    drop-shadow(0 0 52px color-mix(in srgb, var(--accent) 13%, transparent)) drop-shadow(0 14px 34px rgba(0,0,0,.42))}
+  50%{filter:drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 28px color-mix(in srgb, var(--accent) 56%, transparent))
+    drop-shadow(0 0 84px color-mix(in srgb, var(--accent) 22%, transparent)) drop-shadow(0 14px 34px rgba(0,0,0,.42))}
+}
+@keyframes cardInner{
+  0%,100%{box-shadow:inset 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent), inset 0 1px 0 rgba(255,255,255,.06)}
+  50%{box-shadow:inset 0 0 32px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 1px 0 rgba(255,255,255,.08)}
+}
+@keyframes phonePulse{0%,100%{opacity:.3}50%{opacity:.6}}
+
+/* 手機版：拿掉 iOS Safari 會「重複發生問題」重載的效果，改用只在合成層跑的動畫 */
+[data-layout="phone"] .card{animation:none}
+[data-layout="phone"] .card__in{animation:none;backdrop-filter:none}
+[data-layout="phone"] .card::before{mix-blend-mode:normal;opacity:.9}
+[data-layout="phone"] .card__in::after{mix-blend-mode:normal;animation:phonePulse 3.2s ease-in-out infinite}
+[data-layout="phone"] .card.zone--b .card__in::after{animation-delay:-.8s}
+[data-layout="phone"] .card.zone--c .card__in::after{animation-delay:-1.6s}
+[data-layout="phone"] .card.zone--d .card__in::after{animation-delay:-2.4s}
+[data-layout="phone"] .state-card{filter:drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 26%, transparent))}
+[data-layout="phone"] .state-card__in{backdrop-filter:none}
+
+@media (prefers-reduced-motion:reduce){ .card,.card::before,.card__in{animation:none} }
+</style>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true">
+  <div class="sky"></div>
+  <div class="city"></div>
+  <div class="veil"></div>
+</div>
+
+<main class="stage">
+  <header class="top">
+    <div class="brand">
+      <img class="bd2" src="image/browndust2-white-tc.png" alt="BROWN DUST II">
+      <span class="sep"></span>
+      <img class="pandora" src="image/pandora-city.webp" alt="PANDORA CITY">
+    </div>
+    <div class="infobar">
+      <div class="seg seg--event"><span class="val" data-bind="event"></span></div>
+      <div class="seg seg--updated"><span class="lbl"></span><span class="val" data-bind="updated"></span></div>
+    </div>
+  </header>
+
+  <div class="main" data-bind="main"><!-- render() 填入 grid 或 state-card --></div>
+
+  <footer class="foot" data-bind="foot"></footer>
+</main>
+
+<script>
+/* ==================================================================
+   1. 後台串接點 —— 工程師改這裡
+   ================================================================== */
+const CONFIG = {
+  endpoint : '/api/queue-state',   // ← 改成你的 API 路徑
+  pollMs   : 4000,                 // 輪詢間隔
+  staleMs  : 30000,                // 超過這麼久沒成功抓到 → 視為斷線
+};
+
+/**
+ * 回傳一包 State 物件（格式見 data-contract.md）。
+ * 後台工程師：把下面兩行註解打開、刪掉 return currentMock() 即可。
+ */
+async function fetchState(){
+  // const r = await fetch(CONFIG.endpoint, { cache:'no-store' });
+  // if (!r.ok) throw new Error('HTTP ' + r.status);
+  // return r.json();
+  return currentMock();            // ← 開發預覽用假資料，上線可連同 MOCKS 一起刪
+}
+
+/* ==================================================================
+   2. 假資料（僅開發預覽；?mock= 切換）—— 上線可整段刪除
+   ================================================================== */
+const SCHEDULE = { caption:'2027 TAIPEI GAME SHOW', dates:'01/21 - 01/24', hours:'09:00 - 17:00' };
+const LIVE_ZONES = [
+  { id:'A', name:'報到區',   label:'目前叫號', state:'serving', value:'A-001' },
+  { id:'B', name:'商售區',   label:'目前叫號', state:'serving', value:'B-002' },
+  { id:'C', name:'預約取貨', label:'目前叫號', state:'serving', value:'C-012' },
+  { id:'D', name:'尊榮酒吧', label:'目前梯次', state:'serving', value:'第1梯次', sub:'10:00–10:25' },
+];
+const MOCKS = {
+  live: {
+    phase:'live', event:'2027 台北電玩展', updatedAt:null, notice:null,
+    zones: LIVE_ZONES,
+  },
+  'live-paused': {
+    phase:'live', event:'2027 台北電玩展', updatedAt:null, notice:null,
+    zones: LIVE_ZONES.map(z => z.id === 'B'
+      ? { id:'B', name:'商售區', label:'目前叫號', state:'paused', note:'請依照現場工作人員指示' }
+      : z),
+  },
+  pre: {
+    phase:'pre', event:'2027 台北電玩展',
+    title:'本活動<br>尚未開始', message:'叫號服務將於活動正式開始後啟用', schedule:SCHEDULE,
+  },
+  today_ended: {
+    phase:'today_ended', event:'2027 台北電玩展',
+    title:'今日活動<br>已結束', message:'感謝您的參與，期待明日再相見', schedule:SCHEDULE,
+  },
+  ended: {
+    phase:'ended', event:'2027 台北電玩展',
+    title:'本次活動<br>已圓滿結束', message:'感謝您的參與，期待未來下一個<br>線下活動再與您相見',
+  },
+};
+function currentMock(){
+  const key = new URLSearchParams(location.search).get('mock') || 'live';
+  if (key === 'offline'){ const e = new Error('mock offline'); e.hard = true; throw e; }
+  if (key === 'stale')  { lastGood = structuredClone(MOCKS.live); const e = new Error('mock stale'); e.stale = true; throw e; }
+  return structuredClone(MOCKS[key] || MOCKS.live);
+}
+
+/* ==================================================================
+   3. 版型判定（非 RWD，載入時決定一次）
+   ================================================================== */
+function pickLayout(){
+  const forced = new URLSearchParams(location.search).get('layout');
+  if (forced === 'phone' || forced === 'wide') return forced;
+  return Math.min(screen.width, screen.height) <= 500 ? 'phone' : 'wide';
+}
+const root = document.documentElement;
+root.dataset.layout = pickLayout();
+
+/* ==================================================================
+   4. 舞台 + 背景縮放
+   ================================================================== */
+function fit(){
+  const layout = root.dataset.layout;
+  const stage = document.querySelector('.stage');
+  root.style.setProperty('--effect-ratio',
+    String(layout === 'phone' ? 2.2 : Math.min(1, 2560 / innerWidth)));
+  if (layout === 'wide'){
+    stage.style.setProperty('--scale', Math.min(innerWidth / 1920, innerHeight / 1080));
+  } else {
+    const s = innerWidth / 390;
+    stage.style.setProperty('--scale', s);
+    document.body.style.height = (stage.offsetHeight * s) + 'px';
+  }
+}
+
+/* ==================================================================
+   5. 渲染
+   ================================================================== */
+const $main = document.querySelector('[data-bind="main"]');
+const $foot = document.querySelector('[data-bind="foot"]');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const PHASES = new Set(['pre','live','today_ended','ended']);
+const FOOT = {
+  live : { main:'請於叫號前返回指定區域等候', note:'目前號碼以前皆可入場，實際叫號狀況以現場工作人員公告為準' },
+  other: { main:'更多詳情資訊，請洽【棕色塵埃2】', note:'社群媒體與官方網站進行查閱' },
+};
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function hm(iso){
+  const d = iso ? new Date(iso) : new Date();
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
+/* 單格：依 zone.state 決定內容 */
+function zoneCardHTML(z, i){
+  const cls = ['card', 'zone--' + z.id.toLowerCase()];
+  const abnormal = z.state && !['serving','calling'].includes(z.state);
+  if (abnormal) cls.push('is-abnormal');
+
+  let valueBlock;
+  if (z.state === 'paused'){
+    valueBlock = `<div class="num">暫停服務</div><div class="sub">${esc(z.note || '請依照現場工作人員指示')}</div>`;
+  } else if (z.state === 'closed'){
+    valueBlock = `<div class="num">本區已結束</div>${z.note ? `<div class="sub">${esc(z.note)}</div>` : ''}`;
+  } else if (z.state === 'full'){
+    valueBlock = `<div class="num">${esc(z.value || '額滿')}</div><div class="sub">${esc(z.note || '已額滿・候補中')}</div>`;
+  } else { // serving / calling / 未知 → 顯示號碼
+    const isText = /[^\x00-\x7F]/.test(z.value || '');
+    valueBlock = `<div class="num${isText ? ' num--text' : ''}">${esc(z.value)}</div>` +
+                 (z.sub ? `<div class="sub">${esc(z.sub)}</div>` : '');
+  }
+  return `<article class="${cls.join(' ')}" style="--i:${i}">
+    <div class="card__in">
+      <div class="badge">${esc(z.id)}</div>
+      <div class="info">
+        <div class="name">${esc(z.name)}</div>
+        <div class="label">${esc(z.label || (z.state === 'paused' ? '目前狀態' : '目前叫號'))}</div>
+      </div>
+      <div class="value">${valueBlock}</div>
+    </div>
+  </article>`;
+}
+
+function gridHTML(zones){
+  return `<div class="grid">${zones.map(zoneCardHTML).join('')}</div>`;
+}
+
+function stateCardHTML({ title, message, schedule }){
+  return `<section class="state-card"><div class="state-card__in">
+    <h1>${title || ''}</h1>
+    ${message ? `<p class="state-msg">${message}</p>` : ''}
+    ${schedule ? `<div class="state-sched">
+      <span>${esc(schedule.caption)}</span>
+      <strong>${esc(schedule.dates)}</strong>
+      <time>${esc(schedule.hours)}</time>
+    </div>` : ''}
+  </div></section>`;
+}
+
+let lastGood = null;
+
+function applyState(conn, data){
+  root.dataset.conn = conn;
+
+  // 斷線且完全沒有可顯示的舊資料 → 全屏提示
+  if (conn === 'offline' && !data){
+    root.dataset.phase = 'ended';
+    $main.innerHTML = stateCardHTML({
+      title:'暫時無法<br>取得叫號資訊',
+      message:'請洽現場工作人員，或稍候再試',
+    });
+    $foot.innerHTML = `<span class="fmain">${FOOT.other.main}</span><span class="fnote">${FOOT.other.note}</span>`;
+    fit();
+    return;
+  }
+  if (!data) data = lastGood || MOCKS.live;
+  lastGood = data;
+
+  const phase = PHASES.has(data.phase) ? data.phase : 'live';
+  root.dataset.phase = phase;
+
+  // 標頭
+  document.querySelectorAll('[data-bind="event"]').forEach(el => el.textContent = data.event || '');
+  document.querySelectorAll('[data-bind="updated"]').forEach(el => el.textContent = hm(data.updatedAt));
+
+  // 中央區
+  if (phase === 'live'){
+    const zones = Array.isArray(data.zones) ? data.zones : [];
+    $main.innerHTML = gridHTML(zones);
+  } else {
+    $main.innerHTML = stateCardHTML({
+      title  : data.title || '',
+      message: data.message || '',
+      schedule: (phase === 'pre' || phase === 'today_ended') ? data.schedule : null,
+    });
+  }
+
+  // 頁尾
+  const f = phase === 'live' ? FOOT.live : FOOT.other;
+  $foot.innerHTML = `<span class="fmain">${f.main}</span><span class="fnote">${f.note}</span>`;
+
+  fit();
+}
+
+/* ==================================================================
+   6. 輪詢迴圈
+   ================================================================== */
+let lastOkAt = Date.now();
+async function poll(){
+  try{
+    const data = await fetchState();
+    lastOkAt = Date.now();
+    applyState('online', data);
+  }catch(err){
+    const hardOffline = err && err.hard;
+    const stale = !hardOffline && err && (err.stale || (lastGood && Date.now() - lastOkAt <= CONFIG.staleMs));
+    if (!err || !err.stale) console.warn('[queue] fetchState failed:', err);
+    applyState(stale ? 'stale' : 'offline', stale ? lastGood : null);
+  }finally{
+    setTimeout(poll, CONFIG.pollMs);
+  }
+}
+
+poll();
+
+/* 只有寬度變才重排（iOS 收合網址列只改高度，避免迴圈重載） */
+let lastW = innerWidth;
+addEventListener('resize', () => { if (innerWidth !== lastW){ lastW = innerWidth; fit(); } });
+addEventListener('orientationchange', () => setTimeout(() => { lastW = innerWidth; fit(); }, 250));
+</script>
+</body>
+</html>
