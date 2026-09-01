@@ -15,8 +15,6 @@
    - 測試用網址參數：?layout=phone / ?layout=wide 可強制切換
    ============================================================ */
 
-@property --sweep { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-
 :root{
   --bg:#04060f;
   --ink:#eaf2ff;
@@ -119,34 +117,34 @@ body{
   position:relative;
   padding:var(--frame);
   clip-path:var(--clip);
+  overflow:hidden;
   /* 這一層 = 發光外框（亮色） */
   background:linear-gradient(150deg,
     color-mix(in srgb, var(--accent) 88%, #fff 12%),
     var(--accent) 45%,
     color-mix(in srgb, var(--accent) 84%, #000 16%));
-  /* 霓虹外暈（= 上上版做法：一圈緊的 + 一圈散的 + 落影，只是改用 drop-shadow 才能吃切角） */
+  /* 霓虹外暈（靜態 drop-shadow） */
   filter:
     drop-shadow(0 0 3px var(--accent))
     drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 40%, transparent))
     drop-shadow(0 14px 34px rgba(0,0,0,.42));
-  animation:cardPulse 3.6s ease-in-out infinite;
 }
-/* 旋轉掃光：貼著切角外框一圈約 8px 的半透明光帶，一段亮弧繞著跑 */
-.card::before{
-  content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
-  clip-path:var(--clip);
-  padding:8px;
-  background:conic-gradient(from var(--sweep),
-    transparent 0turn,
-    color-mix(in srgb, var(--accent) 95%, #fff) .06turn,
-    color-mix(in srgb, var(--accent) 55%, transparent) .13turn,
-    transparent .24turn,
-    transparent 1turn);
+/* 旋轉掃光：靜態環形遮罩窗，內層 ::before 用 transform 旋轉（走合成層，PC/手機都不卡） */
+.card__sweep{
+  position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
+  clip-path:var(--clip);padding:8px;
   -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite:xor;mask-composite:exclude;
-  mix-blend-mode:screen;
-  opacity:.7;
-  animation:sweep 4.6s linear infinite;
+  mix-blend-mode:screen;opacity:.7;
+}
+.card__sweep::before{
+  content:"";position:absolute;top:50%;left:50%;width:230%;aspect-ratio:1;translate:-50% -50%;
+  background:conic-gradient(from 0deg,
+    transparent 0turn,
+    color-mix(in srgb, var(--accent) 95%, #fff) .07turn,
+    color-mix(in srgb, var(--accent) 55%, transparent) .14turn,
+    transparent .26turn, transparent 1turn);
+  animation:spin 4.6s linear infinite;
 }
 /* 內層：同切角形狀、深色玻璃，蓋掉中間留下外框 */
 .card__in{
@@ -157,18 +155,17 @@ body{
   min-height:100%;
   background:linear-gradient(150deg, rgba(10,15,32,.94), rgba(8,12,26,.82));
   backdrop-filter:blur(10px);
-  /* 內側光暈（原始版做法：inset glow + 頂緣高光），cardInner 讓它一起呼吸 */
   box-shadow:
     inset 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent),
     inset 0 1px 0 rgba(255,255,255,.06);
-  animation:cardInner 3.6s ease-in-out infinite;
 }
-/* 內側掃描光暈（原始版 ::after，screen 疊在深色玻璃上、文字下方） */
+/* 內側掃描光暈：opacity 呼吸（合成層安全） */
 .card__in::after{
   content:"";position:absolute;inset:0;z-index:-1;clip-path:var(--clip);pointer-events:none;
   background:radial-gradient(65% 125% at 20% 50%,
-    color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
-  mix-blend-mode:screen;opacity:.55;
+    color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%);
+  mix-blend-mode:screen;opacity:.5;
+  animation:glowPulse 3.6s ease-in-out infinite;
 }
 
 .badge{
@@ -205,18 +202,16 @@ body{
 .card .sub{font-family:var(--font-num);font-weight:600;font-size:26px;color:var(--ink-dim);letter-spacing:.04em}
 
 .card.zone--a{--accent:var(--a-a)}
-.card.zone--b{--accent:var(--a-b);animation-delay:-.9s}
-.card.zone--c{--accent:var(--a-c);animation-delay:-1.8s}
-.card.zone--d{--accent:var(--a-d);animation-delay:-2.7s}
-.card.zone--b .card__in{animation-delay:-.9s}
-.card.zone--c .card__in{animation-delay:-1.8s}
-.card.zone--d .card__in{animation-delay:-2.7s}
-.card.zone--b::before{animation-delay:-1.1s}
-.card.zone--c::before{animation-delay:-2.3s}
-.card.zone--d::before{animation-delay:-3.4s}
-.card.zone--b .badge{animation-delay:-2s}
-.card.zone--c .badge{animation-delay:-4.5s}
-.card.zone--d .badge{animation-delay:-6.5s}
+.card.zone--b{--accent:var(--a-b)}
+.card.zone--c{--accent:var(--a-c)}
+.card.zone--d{--accent:var(--a-d)}
+/* 四張卡動畫錯開 */
+.card.zone--b .card__sweep::before{animation-delay:-1.1s}
+.card.zone--c .card__sweep::before{animation-delay:-2.3s}
+.card.zone--d .card__sweep::before{animation-delay:-3.4s}
+.card.zone--b .card__in::after{animation-delay:-.9s}
+.card.zone--c .card__in::after{animation-delay:-1.8s}
+.card.zone--d .card__in::after{animation-delay:-2.7s}
 
 /* 頁尾 */
 .foot{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;
@@ -256,49 +251,16 @@ body{
 .stage--phone .foot .main{font-size:14px}
 .stage--phone .foot .note{font-size:11px}
 
-/* 手機版：拿掉 iOS Safari 會「重複發生問題」重載的東西
-   （逐幀重繪的 animated filter、多層 backdrop-filter、blend mode），
-   但保留「會動」的部分 —— 旋轉掃光 + 光暈 opacity 脈動（opacity 動畫只在合成層跑，不觸發重繪）。 */
-.stage--phone .card{animation:none}                     /* 關掉 cardPulse（animated drop-shadow） */
-.stage--phone .card__in{animation:none;backdrop-filter:none}
-.stage--phone .card::before{                            /* 旋轉掃光：保留、加明顯、不用 blend mode */
-  mix-blend-mode:normal;opacity:.9;
-}
-.stage--phone .card__in::after{                         /* 內部光暈：改成 opacity 脈動（iOS 安全） */
-  mix-blend-mode:normal;
-  animation:phonePulse 3.2s ease-in-out infinite;
-}
-.stage--phone .card.zone--b .card__in::after{animation-delay:-.8s}
-.stage--phone .card.zone--c .card__in::after{animation-delay:-1.6s}
-.stage--phone .card.zone--d .card__in::after{animation-delay:-2.4s}
+/* 手機版：backdrop-filter 在 iOS 較吃資源，關掉（動畫本身已是合成層安全的） */
+.stage--phone .card__in{backdrop-filter:none}
 .stage--phone .badge{filter:drop-shadow(0 0 10px var(--accent))}
-@keyframes phonePulse{0%,100%{opacity:.3}50%{opacity:.6}}
 
-/* ================= 動畫 ================= */
-@keyframes sweep{to{--sweep:360deg}}
-@keyframes cardPulse{
-  0%,100%{filter:
-    drop-shadow(0 0 3px var(--accent))
-    drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 40%, transparent))
-    drop-shadow(0 0 52px color-mix(in srgb, var(--accent) 13%, transparent))
-    drop-shadow(0 14px 34px rgba(0,0,0,.42))}
-  50%{filter:
-    drop-shadow(0 0 5px var(--accent))
-    drop-shadow(0 0 28px color-mix(in srgb, var(--accent) 56%, transparent))
-    drop-shadow(0 0 84px color-mix(in srgb, var(--accent) 22%, transparent))
-    drop-shadow(0 14px 34px rgba(0,0,0,.42))}
-}
-/* 內側光暈跟著呼吸（對應原始版 cardPulse 的 inset 部分） */
-@keyframes cardInner{
-  0%,100%{box-shadow:
-    inset 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent),
-    inset 0 1px 0 rgba(255,255,255,.06)}
-  50%{box-shadow:
-    inset 0 0 32px color-mix(in srgb, var(--accent) 30%, transparent),
-    inset 0 1px 0 rgba(255,255,255,.08)}
-}
+/* ================= 動畫（只用 transform / opacity，走合成層，PC 與手機一致且不卡） ================= */
+@keyframes spin{to{rotate:360deg}}
+@keyframes glowPulse{0%,100%{opacity:.34}50%{opacity:.6}}
+
 @media (prefers-reduced-motion:reduce){
-  .card,.card::before,.card__in{animation:none}
+  .card__sweep::before,.card__in::after{animation:none}
 }
 </style>
 </head>
@@ -408,6 +370,7 @@ function nowHM(){ const d = new Date(); return pad2(d.getHours()) + ':' + pad2(d
 function cardHTML(z){
   const isText = /[^\x00-\x7F]/.test(z.value);   // 含中文等非 ASCII -> 用文字級距
   return `<article class="card ${z.cls}">
+    <div class="card__sweep"></div>
     <div class="card__in">
       <div class="badge">${z.id}</div>
       <div class="info">
